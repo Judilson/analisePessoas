@@ -13,6 +13,9 @@ import com.mongodb.DBCollection;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  *
@@ -22,9 +25,9 @@ public class TesteConexao {
 
     public static void main(String[] argv) {
 
-        DB db = ConnectionMongo.getInstance().getClient(ConnectionMongo.ENDERECOESCRITA, ConnectionMongo.PORTAESCRITA, null, null).getDB("giex");
+        DB db = ConnectionMongo.getInstance().getClient(ConnectionMongo.ENDERECOESCRITA, ConnectionMongo.PORTAESCRITA, null, null).getDB("GIEXONLINE");
 
-        DBCollection collection = db.getCollection("giex");
+        DBCollection collection = db.getCollection("INDICADOR_PESSOAS");
 
         try {
 
@@ -34,10 +37,10 @@ public class TesteConexao {
             PreparedStatement psmtLancamentos = null;
 
             String queryPessoa = "select pess_id_pessoa, cred_id_credor from giexbase.tb_pessoas_indicadores"
-                    + " where pein_st_lote = 'S' and rownum < 100";
+                    + " where pein_st_lote = 'S' and rownum < 10";
 
             String queryCadastro = "select cada_id_cadastro from giexbase.tb_cadastros_pessoas "
-                    + " where pess_id_pessoa = ?id_pessoa";
+                    + " where pess_id_pessoa = ?";
 
             String queryLancamentos = "SELECT   li.lanc_id_lancamento,"
                     + "         laid_st_suspenso,"
@@ -49,10 +52,10 @@ public class TesteConexao {
                     + "         INNER JOIN"
                     + "             giexbase.tb_lancamentos l"
                     + "         ON li.lanc_id_lancamento = l.lanc_id_lancamento"
-                    + " WHERE   l.cred_id_credor = ?id_credor"
+                    + " WHERE   l.cred_id_credor = ?"
                     + "         AND l.cada_id_cadastro IN (SELECT   cada_id_cadastro"
                     + "                                      FROM   giexbase.tb_cadastros_pessoas"
-                    + "                                     WHERE   pess_id_pessoa = ?id_pessoa)";
+                    + "                                     WHERE   pess_id_pessoa = ?)";
             psmtPessoa = conn.prepareStatement(queryPessoa);
             //psmt.setInt(1, Integer.parseInt(request.getParameter("idCredor")));
 
@@ -61,15 +64,15 @@ public class TesteConexao {
             while (resultSetPess.next()) {
 
                 BasicDBObject documentPessoa = new BasicDBObject();
-                BasicDBObject documentCadastro = new BasicDBObject();
+                List<BasicDBObject> documentCadastro = new ArrayList<>();
                 BasicDBObject documentLancamento = new BasicDBObject();
-                BasicDBObject documentLancamento_suspeso = new BasicDBObject();
-                BasicDBObject documentLancamento_aberto = new BasicDBObject();
-                BasicDBObject documentLancamento_cancelado = new BasicDBObject();
-                BasicDBObject documentLancamento_pago = new BasicDBObject();
-                BasicDBObject documentLancamento_prescrito = new BasicDBObject();
+                List<BasicDBObject> documentLancamento_suspeso = new ArrayList<>();
+                List<BasicDBObject> documentLancamento_aberto = new ArrayList<>();
+                List<BasicDBObject> documentLancamento_cancelado = new ArrayList<>();
+                List<BasicDBObject> documentLancamento_pago = new ArrayList<>();
+                List<BasicDBObject> documentLancamento_prescrito = new ArrayList<>();
 
-                if (resultSetPess.getMetaData().getColumnClassName(1) == "java.math.BigDecimal") {
+                if ("java.math.BigDecimal".equals(resultSetPess.getMetaData().getColumnClassName(1))) {
                     documentPessoa.put(resultSetPess.getMetaData().getColumnLabel(1), Double.parseDouble(resultSetPess.getObject(1).toString()));
                 } else {
                     documentPessoa.put(resultSetPess.getMetaData().getColumnLabel(1), resultSetPess.getObject(1));
@@ -82,89 +85,67 @@ public class TesteConexao {
 
                 int totalRowsCadastro = resultSetCad.getMetaData().getColumnCount();
 
-                for (int i = 1; i <= totalRowsCadastro; i++) {
-                    try {
-                        if (resultSetCad.getMetaData().getColumnClassName(i) == "java.math.BigDecimal") {
-                            documentCadastro.put(resultSetCad.getMetaData().getColumnLabel(i), Double.parseDouble(resultSetCad.getObject(i).toString()));
-                        } else {
-                            documentCadastro.put(resultSetCad.getMetaData().getColumnLabel(i), resultSetCad.getObject(i));
+                while (resultSetCad.next()) {
+
+                    for (int i = 1; i <= totalRowsCadastro; i++) {
+                        try {
+                            if ("java.math.BigDecimal".equals(resultSetCad.getMetaData().getColumnClassName(i))) {
+                                documentCadastro.add(new BasicDBObject(resultSetCad.getMetaData().getColumnLabel(i), Double.parseDouble(resultSetCad.getObject(i).toString())));
+                            } else {
+                                documentCadastro.add(new BasicDBObject(resultSetCad.getMetaData().getColumnLabel(i), resultSetCad.getObject(i)));
+                            }
+                        } catch (NumberFormatException | SQLException e) {
                         }
-                    } catch (Exception e) {
                     }
+
                 }
+
                 documentPessoa.put("Cadastros", documentCadastro);
 
                 psmtLancamentos = conn.prepareStatement(queryLancamentos);
                 psmtLancamentos.setObject(2, resultSetPess.getObject("pess_id_pessoa"));
-                psmtLancamentos.setObject(2, resultSetPess.getObject("cred_id_credor"));
+                psmtLancamentos.setObject(1, resultSetPess.getObject("cred_id_credor"));
 
                 ResultSet resultSetLanc = psmtLancamentos.executeQuery();
 
-                int totalRowsLancamentos = resultSetCad.getMetaData().getColumnCount();
 
-                for (int i = 1; i <= totalRowsLancamentos; i++) {
+                while (resultSetLanc.next()) {
+                    try {
+                        if ("S".equals(resultSetLanc.getString("LAID_ST_SUSPENSO"))) {
+                            documentLancamento_suspeso.add(new BasicDBObject("LANC_ID_LANCAMENTO", Double.parseDouble(resultSetLanc.getString("LANC_ID_LANCAMENTO"))));
+                        }
+                    } catch (NumberFormatException | SQLException e) {
+                    }
 
                     try {
-                        if (resultSetLanc.getMetaData().getColumnLabel(i) == "LAID_ST_SUSPENSO"
-                                && resultSetLanc.getObject(i) == "S") {
-                            if (resultSetLanc.getMetaData().getColumnClassName(i) == "java.math.BigDecimal") {
-                                documentLancamento_suspeso.put(resultSetLanc.getMetaData().getColumnLabel(i), Double.parseDouble(resultSetLanc.getObject(i).toString()));
-                            } else {
-                                documentLancamento_suspeso.put(resultSetLanc.getMetaData().getColumnLabel(i), resultSetLanc.getObject(i));
-                            }
+                        if ("S".equals(resultSetLanc.getString("LAID_ST_PRESCRITO"))) {
+                            documentLancamento_prescrito.add(new BasicDBObject("LANC_ID_LANCAMENTO", Double.parseDouble(resultSetLanc.getString("LANC_ID_LANCAMENTO"))));
                         }
-                    } catch (Exception e) {
+                    } catch (NumberFormatException | SQLException e) {
                     }
-                    
+
                     try {
-                        if (resultSetLanc.getMetaData().getColumnLabel(i) == "LAID_ST_PRESCRITO"
-                                && resultSetLanc.getObject(i) == "S") {
-                            if (resultSetLanc.getMetaData().getColumnClassName(i) == "java.math.BigDecimal") {
-                                documentLancamento_prescrito.put(resultSetLanc.getMetaData().getColumnLabel(i), Double.parseDouble(resultSetLanc.getObject(i).toString()));
-                            } else {
-                                documentLancamento_prescrito.put(resultSetLanc.getMetaData().getColumnLabel(i), resultSetLanc.getObject(i));
-                            }
+                        if ("S".equals(resultSetLanc.getString("LAID_ST_ABERTO"))) {
+                            documentLancamento_aberto.add(new BasicDBObject("LANC_ID_LANCAMENTO", Double.parseDouble(resultSetLanc.getString("LANC_ID_LANCAMENTO"))));
                         }
-                    } catch (Exception e) {
+                    } catch (NumberFormatException | SQLException e) {
                     }
-                    
+
                     try {
-                        if (resultSetLanc.getMetaData().getColumnLabel(i) == "LAID_ST_ABERTO"
-                                && resultSetLanc.getObject(i) == "S") {
-                            if (resultSetLanc.getMetaData().getColumnClassName(i) == "java.math.BigDecimal") {
-                                documentLancamento_aberto.put(resultSetLanc.getMetaData().getColumnLabel(i), Double.parseDouble(resultSetLanc.getObject(i).toString()));
-                            } else {
-                                documentLancamento_aberto.put(resultSetLanc.getMetaData().getColumnLabel(i), resultSetLanc.getObject(i));
-                            }
+                        if ("S".equals(resultSetLanc.getString("LAID_ST_CANCELADO"))) {
+                            documentLancamento_cancelado.add(new BasicDBObject("LANC_ID_LANCAMENTO", Double.parseDouble(resultSetLanc.getString("LANC_ID_LANCAMENTO"))));
                         }
-                    } catch (Exception e) {
+                    } catch (NumberFormatException | SQLException e) {
                     }
-                    
+
                     try {
-                        if (resultSetLanc.getMetaData().getColumnLabel(i) == "LAID_ST_CANCELADO"
-                                && resultSetLanc.getObject(i) == "S") {
-                            if (resultSetLanc.getMetaData().getColumnClassName(i) == "java.math.BigDecimal") {
-                                documentLancamento_cancelado.put(resultSetLanc.getMetaData().getColumnLabel(i), Double.parseDouble(resultSetLanc.getObject(i).toString()));
-                            } else {
-                                documentLancamento_cancelado.put(resultSetLanc.getMetaData().getColumnLabel(i), resultSetLanc.getObject(i));
-                            }
+                        if ("S".equals(resultSetLanc.getString("LAID_ST_PAGO"))) {
+                            documentLancamento_pago.add(new BasicDBObject("LANC_ID_LANCAMENTO", Double.parseDouble(resultSetLanc.getString("LANC_ID_LANCAMENTO"))));
                         }
-                    } catch (Exception e) {
+                    } catch (NumberFormatException | SQLException e) {
                     }
-                    
-                   try {
-                        if (resultSetLanc.getMetaData().getColumnLabel(i) == "LAID_ST_PAGO"
-                                && resultSetLanc.getObject(i) == "S") {
-                            if (resultSetLanc.getMetaData().getColumnClassName(i) == "java.math.BigDecimal") {
-                                documentLancamento_pago.put(resultSetLanc.getMetaData().getColumnLabel(i), Double.parseDouble(resultSetLanc.getObject(i).toString()));
-                            } else {
-                                documentLancamento_pago.put(resultSetLanc.getMetaData().getColumnLabel(i), resultSetLanc.getObject(i));
-                            }
-                        }
-                    } catch (Exception e) {
-                    }
+
                 }
-                documentPessoa.put("Cadastros", documentCadastro);
 
                 documentLancamento.put("LancamentosAberto", documentLancamento_aberto);
                 documentLancamento.put("LancamentosCancelado", documentLancamento_cancelado);
@@ -179,8 +160,7 @@ public class TesteConexao {
             }
 
             conn.close();
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (NumberFormatException | SQLException e) {
         }
 
     }
