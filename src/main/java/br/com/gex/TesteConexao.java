@@ -10,12 +10,18 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  *
  * @author jjunior
  */
 public class TesteConexao {
+
+    static ResultSet resultSetPess = null;
 
     public static void main(String[] argv) {
 
@@ -30,14 +36,30 @@ public class TesteConexao {
             psmtPessoa = conn.prepareStatement(queryPessoa);
             //psmt.setInt(1, Integer.parseInt(request.getParameter("idCredor")));
 
-            ResultSet resultSetPess = psmtPessoa.executeQuery();
+            resultSetPess = psmtPessoa.executeQuery();
 
+            ExecutorService pool = Executors.newFixedThreadPool(5);
             while (resultSetPess.next()) {
 
-                new InsertIndicadorPessoa().insert(resultSetPess.getInt("pess_id_pessoa"), resultSetPess.getInt("cred_id_credor"));
-                
-            }
+                for (int i = 1; i <= 5; i++) {
+                    Runnable r = new Runnable() {
+                        InsertIndicadorPessoa iip;
 
+                        public void run() {
+
+                            try {
+                                iip = new InsertIndicadorPessoa(resultSetPess.getInt("cred_id_credor"), resultSetPess.getInt("pess_id_pessoa"));
+                            } catch (SQLException ex) {
+                                Logger.getLogger(TesteConexao.class.getName()).log(Level.SEVERE, null, ex);
+                            }
+                            iip.start();
+                        }
+                    };
+                    pool.execute(r);
+
+                }
+
+            }
             conn.close();
         } catch (NumberFormatException | SQLException e) {
             e.printStackTrace();
