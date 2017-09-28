@@ -37,7 +37,7 @@ public class TesteConexao {
             PreparedStatement psmtLancamentos = null;
 
             String queryPessoa = "select pess_id_pessoa, cred_id_credor from giexbase.tb_pessoas_indicadores"
-                    + " where pein_st_lote = 'S' and rownum < 10";
+                    + " where pein_st_lote = 'S'";
 
             String queryCadastro = "select cada_id_cadastro from giexbase.tb_cadastros_pessoas "
                     + " where pess_id_pessoa = ?";
@@ -53,6 +53,8 @@ public class TesteConexao {
                     + "             giexbase.tb_lancamentos l"
                     + "         ON li.lanc_id_lancamento = l.lanc_id_lancamento"
                     + " WHERE   l.cred_id_credor = ?"
+                    + "         AND laid_st_lote = 'S'"
+                    + "         AND l.lanc_id_lancamento_his IS NULL"
                     + "         AND l.cada_id_cadastro IN (SELECT   cada_id_cadastro"
                     + "                                      FROM   giexbase.tb_cadastros_pessoas"
                     + "                                     WHERE   pess_id_pessoa = ?)";
@@ -79,7 +81,7 @@ public class TesteConexao {
                 }
 
                 psmtCadastro = conn.prepareStatement(queryCadastro);
-                psmtCadastro.setObject(1, resultSetPess.getObject("pess_id_pessoa"));
+                psmtCadastro.setInt(1, resultSetPess.getInt("pess_id_pessoa"));
 
                 ResultSet resultSetCad = psmtCadastro.executeQuery();
 
@@ -100,11 +102,13 @@ public class TesteConexao {
 
                 }
 
+                psmtCadastro.close();
+                
                 documentPessoa.put("Cadastros", documentCadastro);
 
                 psmtLancamentos = conn.prepareStatement(queryLancamentos);
-                psmtLancamentos.setObject(2, resultSetPess.getObject("pess_id_pessoa"));
-                psmtLancamentos.setObject(1, resultSetPess.getObject("cred_id_credor"));
+                psmtLancamentos.setInt(2, resultSetPess.getInt("pess_id_pessoa"));
+                psmtLancamentos.setInt(1, resultSetPess.getInt("cred_id_credor"));
 
                 ResultSet resultSetLanc = psmtLancamentos.executeQuery();
 
@@ -147,6 +151,8 @@ public class TesteConexao {
 
                 }
 
+                psmtLancamentos.close();
+                
                 documentLancamento.put("LancamentosAberto", documentLancamento_aberto);
                 documentLancamento.put("LancamentosCancelado", documentLancamento_cancelado);
                 documentLancamento.put("LancamentosPago", documentLancamento_pago);
@@ -161,6 +167,7 @@ public class TesteConexao {
 
             conn.close();
         } catch (NumberFormatException | SQLException e) {
+            e.printStackTrace();
         }
 
     }
